@@ -1,0 +1,24 @@
+{
+  "name": "hardware-ingestor",
+  "version": "1.0.0",
+  "description": "Eyes for ALTAR",
+  "homepage": "https://github.com/Techniks-lab/ALTAR-Eyes#readme",
+  "bugs": {
+    "url": "https://github.com/Techniks-lab/ALTAR-Eyes/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Techniks-lab/ALTAR-Eyes.git"
+  },
+  "license": "ISC",
+  "author": "Meek-Maestro",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
+}
