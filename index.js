@@ -7,8 +7,48 @@ const path = require("path");
 const leftViewers = new Set();
 const rightViewers = new Set();
 
-// --- 2. Create the HTTP server ---
+// --- 2. Latest frames + HTTP MJPEG streams ---
+let lastLeftFrame = null;
+let lastRightFrame = null;
+const leftHttpStreams = new Set();
+const rightHttpStreams = new Set();
+
+function writeMjpegFrame(res, buf) {
+  const head = [
+    '--frame',
+    'Content-Type: image/jpeg',
+    'Content-Length: ' + buf.length,
+    '',
+    ''
+  ].join('\r\n');
+  res.write(head);
+  res.write(buf);
+  res.write('\r\n');
+}
+
+function handleMjpegStream(res, label, lastFrame, httpStreams) {
+  res.writeHead(200, {
+    'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Access-Control-Allow-Origin': '*'
+  });
+  if (lastFrame) writeMjpegFrame(res, lastFrame);
+  httpStreams.add(res);
+  res.on('close', () => httpStreams.delete(res));
+}
+
+// --- 3. Create the HTTP server ---
 const server = createServer((req, res) => {
+  if (req.url === "/stream/left") {
+    handleMjpegStream(res, "LEFT", lastLeftFrame, leftHttpStreams);
+    return;
+  }
+  if (req.url === "/stream/right") {
+    handleMjpegStream(res, "RIGHT", lastRightFrame, rightHttpStreams);
+    return;
+  }
   if (req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(`
@@ -171,7 +211,7 @@ const server = createServer((req, res) => {
   res.end();
 });
 
-// --- 3. Helper to broadcast a frame to a viewer set ---
+// --- 4. Helper to broadcast a frame to a viewer set ---
 function broadcast(viewers, jpegBuffer) {
   if (viewers.size === 0) return;
   const dead = [];
@@ -185,7 +225,7 @@ function broadcast(viewers, jpegBuffer) {
   dead.forEach((v) => viewers.delete(v));
 }
 
-// --- 4. Single WebSocket server, route by path ---
+// --- 5. Single WebSocket server, route by path ---
 const wss = new WebSocketServer({ server, perMessageDeflate: false });
 
 wss.on("connection", (ws, req) => {
@@ -229,7 +269,7 @@ wss.on("connection", (ws, req) => {
   }
 });
 
-// --- 5. Shared frame handler ---
+// --- 6. Shared frame handler ---
 function handleFrame(data, label, viewers) {
   try {
     if (data.length < 5) {
@@ -254,17 +294,33 @@ function handleFrame(data, label, viewers) {
       `${label} frame (${jpegBuffer.length} bytes, ${date.toISOString()})`,
     );
 
+    // Store latest frame for HTTP MJPEG clients
+    if (label === "LEFT") lastLeftFrame = jpegBuffer;
+    else lastRightFrame = jpegBuffer;
+
+    // Push to WebSocket viewers
     broadcast(viewers, jpegBuffer);
+
+    // Push to HTTP MJPEG streams
+    const httpStreams = label === "LEFT" ? leftHttpStreams : rightHttpStreams;
+    const dead = [];
+    for (const s of httpStreams) {
+      try { writeMjpegFrame(s, jpegBuffer); }
+      catch { dead.push(s); }
+    }
+    dead.forEach(s => httpStreams.delete(s));
   } catch (error) {
     console.error(`${label} error:`, error.message);
   }
 }
 
-// --- 6. Start the server ---
+// --- 7. Start the server ---
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Cameras: ws://localhost:${PORT}/broadcast/left`);
   console.log(`         ws://localhost:${PORT}/broadcast/right`);
   console.log(`Viewers: http://localhost:${PORT}`);
+  console.log(`MJPEG:   http://localhost:${PORT}/stream/left`);
+  console.log(`         http://localhost:${PORT}/stream/right`);
 });
