@@ -2,6 +2,7 @@ const { createServer } = require("http");
 const { WebSocketServer } = require("ws");
 const fs = require("fs");
 const path = require("path");
+const { submitHash } = require("./timestamp");
 
 // --- 1. Store viewers for each camera ---
 const leftViewers = new Set();
@@ -49,6 +50,38 @@ const server = createServer((req, res) => {
     handleMjpegStream(res, "RIGHT", lastRightFrame, rightHttpStreams);
     return;
   }
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+  if (req.url === "/api/timestamp" && req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      (async () => {
+        try {
+          const { hash: videoHash, metadata } = JSON.parse(body);
+          if (!videoHash) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "hash is required" }));
+            return;
+          }
+          console.log(`⏳ Submitting hash ${videoHash.slice(0, 16)}… to Solana`);
+          const result = await submitHash(videoHash, metadata);
+          console.log(`✅ Solana tx: ${result.transactionId}`);
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          console.error("❌ Timestamp error:", e.message);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      })();
+    });
+    return;
+  }
+
   if (req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(`

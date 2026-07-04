@@ -1,5 +1,5 @@
 {
-  "name": "hardware-ingestor",
+  "name": "ALTAREYES",
   "version": "1.0.0",
   "description": "Eyes for ALTAR",
   "homepage": "https://github.com/Techniks-lab/ALTAR-Eyes#readme",
@@ -19,6 +19,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "@solana/web3.js": "^1.98.4"
   }
 }
